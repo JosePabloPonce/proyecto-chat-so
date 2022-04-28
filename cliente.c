@@ -1,45 +1,127 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <signal.h>
 #include <unistd.h>
-#include <sys/socket.h>
 #include <sys/types.h>
+#include <sys/socket.h>
 #include <netinet/in.h>
 #include <arpa/inet.h>
+#include <pthread.h>
 #include <stdbool.h>
-#include <json-c/json.h>
 
-bool inicio = true;
-char *usuario;
-char *ip;
-char *status = "ACTIVO";
-char buffer[1024];
-int entrada,entryStatus;
+#define LENGTH 2048
 
-void menu(int clientSocket)
-{
-    if (inicio == true)
-    {
-        printf( "\n");
-        printf( "---------------------------------------------------\n");
-        printf( "Bienvenido a Chat SISTOS %s\n",usuario);
-        printf( "Status Actual: %s \n",status);
-        printf( "Ingrese el numero de la opcion que deasea ejecutar\n");
-        printf( "1. Chatear con todos los usuarios (broadcasting)\n");
-        printf( "2. Enviar y recibir mensajes directos, privados, aparte del chat general\n");
-        printf( "3. Cambio de status\n");
-        printf( "4. Listar los usuarios conectados al sistema de chat\n");
-        printf( "5. Desplegar información de un usuario en particular\n");
-        printf( "6. Ayuda \n");
-        printf( "7. Salir \n");
-        printf( "---------------------------------------------------\n");
-        printf( "\n");
+// Global variables
+volatile sig_atomic_t flag = 0;
+int sockfd = 0;
+char usuario[32];
+char status[32] = "Activo";
+
+void str_overwrite_stdout() {
+  printf("%s", "> ");
+  fflush(stdout);
+}
+
+void str_trim_lf (char* arr, int length) {
+  int i;
+  for (i = 0; i < length; i++) { // trim \n
+    if (arr[i] == '\n') {
+      arr[i] = '\0';
+      break;
+    }
+  }
+}
+
+void catch_ctrl_c_and_exit(int sig) {
+    flag = 1;
+}
+
+void send_msg_handler() {
+  char message[LENGTH] = {};
+	char buffer[LENGTH + 32] = {};
+
+  while(1) {
+  	str_overwrite_stdout();
+    fgets(message, LENGTH, stdin);
+    str_trim_lf(message, LENGTH);
+
+    if (strcmp(message, "exit") == 0) {
+			break;
+    } else {
+      sprintf(buffer, "%s: %s\n", usuario, message);
+      send(sockfd, buffer, strlen(buffer), 0);
     }
 
-    else if (inicio == false)
+		bzero(message, LENGTH);
+    bzero(buffer, LENGTH + 32);
+  }
+  catch_ctrl_c_and_exit(2);
+}
+
+void recv_msg_handler() {
+	char message[LENGTH] = {};
+  while (1) {
+		int receive = recv(sockfd, message, LENGTH, 0);
+    if (receive > 0) {
+      printf("%s", message);
+      str_overwrite_stdout();
+    } else if (receive == 0) {
+			break;
+    } else {
+			// -1
+		}
+		memset(message, 0, sizeof(message));
+  }
+}
+
+
+int main(int argc, char **argv){
+	if(argc != 2){
+		printf("Usage: %s <port>\n", argv[0]);
+		return EXIT_FAILURE;
+	}
+
+	char *ip = "127.0.0.1";
+	int port = atoi(argv[1]);
+
+	signal(SIGINT, catch_ctrl_c_and_exit);
+
+	printf("Please enter your usuario: ");
+  fgets(usuario, 32, stdin);
+  str_trim_lf(usuario, strlen(usuario));
+
+
+	if (strlen(usuario) > 32 || strlen(usuario) < 2){
+		printf("usuario must be less than 30 and more than 2 characters.\n");
+		return EXIT_FAILURE;
+	}
+
+	struct sockaddr_in server_addr;
+
+	/* Socket settings */
+	sockfd = socket(AF_INET, SOCK_STREAM, 0);
+  server_addr.sin_family = AF_INET;
+  server_addr.sin_addr.s_addr = inet_addr(ip);
+  server_addr.sin_port = htons(port);
+
+
+  // Connect to Server
+  int err = connect(sockfd, (struct sockaddr *)&server_addr, sizeof(server_addr));
+  if (err == -1) {
+		printf("ERROR: connect\n");
+		return EXIT_FAILURE;
+	}
+
+	// Send usuario
+	send(sockfd, usuario, 32, 0);
+    int entrada, entryStatus;
+    bool bandera = true;
+
+    while(bandera)
     {
         printf( "---------------------------------------------------\n");
-        printf( "Usuario: %s",usuario);
+        printf( "Usuario: %s \n",usuario);
         printf( "ESTATUS ACTUAL: %s \n", status);
         printf( "\n");
         printf( "Ingrese el numero de la opcion que deasea ejecutar:\n");
@@ -52,43 +134,46 @@ void menu(int clientSocket)
         printf( "7. Salir \n");
         printf( "---------------------------------------------------\n");
         printf( "\n");
-    }
+    
 
-    inicio = false;
+    
     printf( "Introduzca la opcion que desea ejecutar (1-7): \n");
-    bzero(buffer, 1024);
     scanf("%d", &entrada);
     printf( "---------------------------------------------------\n");
     printf( "\n");
-
-    while (entrada < 1 || entrada > 6)
-        ;
 
     switch (entrada)
     {
     //Mensaje directo
     case 1:
+    	printf("=== WELCOME TO THE CHATROOM ===\n");
+
+        pthread_t send_msg_thread;
+        if(pthread_create(&send_msg_thread, NULL, (void *) send_msg_handler, NULL) != 0){
+            printf("ERROR: pthread\n");
+            return EXIT_FAILURE;
+        }
+
+        pthread_t recv_msg_thread;
+        if(pthread_create(&recv_msg_thread, NULL, (void *) recv_msg_handler, NULL) != 0){
+            printf("ERROR: pthread\n");
+            return EXIT_FAILURE;
+        }
+
+        while (1){
+            if(flag){
+                printf("\nBye\n");
+                break;
+        }
+        }
+        close(sockfd);
+	    return EXIT_SUCCESS;
         break;
 
     //Broadcast
     case 2:
-    	while(true){
-            printf("%s: ", usuario);
-		    scanf("%s", &buffer);
-		    send(clientSocket, buffer, sizeof(buffer), 0);
-		    if(strcmp(buffer, ":exit") == 0){
-			    //close(clientSocket);
-			    printf("SALIENDO...\n");
-                exit(1);
-                
-		    }   
-
-		    if(recv(clientSocket, buffer, 1024, 0) < 0){
-			    printf("[-]Error in receiving data.\n");
-		    }else{
-			    printf("Server: \t%s\n", buffer);
-		    }
-	    }   
+        break;
+ 
 
 
     //Cambio de status
@@ -103,33 +188,6 @@ void menu(int clientSocket)
         scanf("%d", &entryStatus);
         printf( "\n");
 
-        while (entryStatus != 0)
-        {
-            if (entryStatus == 1)
-            {
-                status = "Activo";
-                //CambioStatus(IdGlobal, status, sockfd, buffer);
-                menu(clientSocket);
-            }
-            else if (entryStatus == 2)
-            {
-                status = "Ocupado";
-                //CambioStatus(IdGlobal, status, sockfd, buffer);
-                menu(clientSocket);
-            }
-            else if (entryStatus == 3)
-            {
-                status = "Inactivo";
-                //CambioStatus(IdGlobal, status, sockfd, buffer);
-                menu(clientSocket);
-            }
-            else
-            {
-                printf( "ERROR! Ingrese un opcion valida\n");
-                menu(clientSocket);
-            }
-        }
-
     //Listado de usuarios
     case 4:
         //obtenerInfoAllUsers(sockfd, buffer);
@@ -142,77 +200,20 @@ void menu(int clientSocket)
         //obtenerInfoUsuario(IdGlobal, usuarioInf, sockfd, buffer);
         break;
 
-    //salir
     case 6:
         break;
-        while (entrada != 6)
-            ;
+
+    //salir
+    case 7:
+        printf("SALIENDO...\n");
+        bandera = false;
+        break;
     }
+    }
+
+	close(sockfd);
+
+	return EXIT_SUCCESS;
 }
 
-int main(int argc, char *argv[]){
-
-    //----json----
-    FILE *fp;
-    char bufferjson[1024];
-    struct json_object *parsed_json;
-    struct json_object *name;
-    struct json_object *age;
-    struct json_object *friends;
-    struct json_object *friend;
-    size_t n_friends;
-    size_t i;
-
-    fp = fopen("test.json", "r");
-    fread(bufferjson, 1024, 1, fp);
-    fclose(fp);
-
-    parsed_json = json_tokener_parse(bufferjson);
-    json_object_object_get_ex(parsed_json, "name", &name);
-    json_object_object_get_ex(parsed_json, "age", &age);
-    json_object_object_get_ex(parsed_json, "friends", &friends);
-
-    printf("Name: %s\n", json_object_get_string(name));
-    printf("Age: %d\n", json_object_get_int(age));
-    
-    n_friends = json_object_array_length(friends);
-    printf("Found %lu friends\n", n_friends);
-    for(i=0; i<n_friends;i++){
-        friend = json_object_array_get_idx(friends, i);
-        printf("%lu. %s\n", i+1, json_object_get_string(friend));
-    }
-    //----json----
-
-
-	int clientSocket, ret, portno;
-	struct sockaddr_in serverAddr;
-
-	clientSocket = socket(AF_INET, SOCK_STREAM, 0);
-	if(clientSocket < 0){
-		printf("[-]Error in connection.\n");
-		exit(1);
-	}
-	printf("[+]Client Socket is created.\n");
-
-    usuario = argv[2];
-    ip = argv[3];
-    portno = atoi(argv[4]);
-
-	memset(&serverAddr, '\0', sizeof(serverAddr));
-	serverAddr.sin_family = AF_INET;
-	serverAddr.sin_port = htons(portno);
-	serverAddr.sin_addr.s_addr = inet_addr("127.0.0.1");
-
-	ret = connect(clientSocket, (struct sockaddr*)&serverAddr, sizeof(serverAddr));
-	if(ret < 0){
-		printf("[-]Error in connection.\n");
-		exit(1);
-	}
-	printf("[+]Connected to Server.\n");
-    menu(clientSocket);
-    printf("DESCONECTANDO...\n");
-    close(clientSocket);
-
-	return 0;
-}
 
