@@ -7,6 +7,7 @@
 #include <netinet/in.h>
 #include <arpa/inet.h>
 #include <stdbool.h>
+#include <json-c/json.h>
 
 bool inicio = true;
 char *usuario;
@@ -24,12 +25,13 @@ void menu(int clientSocket)
         printf( "Bienvenido a Chat SISTOS %s\n",usuario);
         printf( "Status Actual: %s \n",status);
         printf( "Ingrese el numero de la opcion que deasea ejecutar\n");
-        printf( "1. Mensaje directo\n");
-        printf( "2. Broadcasting (Chat general) \n");
+        printf( "1. Chatear con todos los usuarios (broadcasting)\n");
+        printf( "2. Enviar y recibir mensajes directos, privados, aparte del chat general\n");
         printf( "3. Cambio de status\n");
-        printf( "4. Listado de usuarios\n");
-        printf( "5. Informacion de un usuario\n");
-        printf( "6. Salir \n");
+        printf( "4. Listar los usuarios conectados al sistema de chat\n");
+        printf( "5. Desplegar información de un usuario en particular\n");
+        printf( "6. Ayuda \n");
+        printf( "7. Salir \n");
         printf( "---------------------------------------------------\n");
         printf( "\n");
     }
@@ -41,18 +43,19 @@ void menu(int clientSocket)
         printf( "ESTATUS ACTUAL: %s \n", status);
         printf( "\n");
         printf( "Ingrese el numero de la opcion que deasea ejecutar:\n");
-        printf( "1. Mensaje directo\n");
-        printf( "2. Broadcasting (Chat general) \n");
+        printf( "1. Chatear con todos los usuarios (broadcasting)\n");
+        printf( "2. Enviar y recibir mensajes directos, privados, aparte del chat general\n");
         printf( "3. Cambio de status\n");
-        printf( "4. Listado de usuarios\n");
-        printf( "5. Informacion de un usuario\n");
-        printf( "6. Salir \n");
+        printf( "4. Listar los usuarios conectados al sistema de chat\n");
+        printf( "5. Desplegar información de un usuario en particular\n");
+        printf( "6. Ayuda \n");
+        printf( "7. Salir \n");
         printf( "---------------------------------------------------\n");
         printf( "\n");
     }
 
     inicio = false;
-    printf( "Introduzca la opcion que desea ejecutar (1-6): \n");
+    printf( "Introduzca la opcion que desea ejecutar (1-7): \n");
     bzero(buffer, 1024);
     scanf("%d", &entrada);
     printf( "---------------------------------------------------\n");
@@ -70,9 +73,9 @@ void menu(int clientSocket)
     //Broadcast
     case 2:
     	while(true){
-            printf("Client: \t");
-		    scanf("%s", &buffer[0]);
-		    send(clientSocket, buffer, strlen(buffer), 0);
+            printf("%s: ", usuario);
+		    scanf("%s", &buffer);
+		    send(clientSocket, buffer, sizeof(buffer), 0);
 		    if(strcmp(buffer, ":exit") == 0){
 			    //close(clientSocket);
 			    printf("SALIENDO...\n");
@@ -149,6 +152,38 @@ void menu(int clientSocket)
 
 int main(int argc, char *argv[]){
 
+    //----json----
+    FILE *fp;
+    char bufferjson[1024];
+    struct json_object *parsed_json;
+    struct json_object *name;
+    struct json_object *age;
+    struct json_object *friends;
+    struct json_object *friend;
+    size_t n_friends;
+    size_t i;
+
+    fp = fopen("test.json", "r");
+    fread(bufferjson, 1024, 1, fp);
+    fclose(fp);
+
+    parsed_json = json_tokener_parse(bufferjson);
+    json_object_object_get_ex(parsed_json, "name", &name);
+    json_object_object_get_ex(parsed_json, "age", &age);
+    json_object_object_get_ex(parsed_json, "friends", &friends);
+
+    printf("Name: %s\n", json_object_get_string(name));
+    printf("Age: %d\n", json_object_get_int(age));
+    
+    n_friends = json_object_array_length(friends);
+    printf("Found %lu friends\n", n_friends);
+    for(i=0; i<n_friends;i++){
+        friend = json_object_array_get_idx(friends, i);
+        printf("%lu. %s\n", i+1, json_object_get_string(friend));
+    }
+    //----json----
+
+
 	int clientSocket, ret, portno;
 	struct sockaddr_in serverAddr;
 
@@ -180,3 +215,4 @@ int main(int argc, char *argv[]){
 
 	return 0;
 }
+
