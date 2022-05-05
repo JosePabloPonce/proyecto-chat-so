@@ -1,3 +1,4 @@
+
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -140,15 +141,12 @@ int main(int arg, char *args[])
     recv(st, buffer, 1024, 0);
 
     response = json::parse(buffer);
-    string code = response["code"];
+    int code = response["code"];
     string respons = response["response"];
 
 
-    if(code == "200"){
-        printf("mensaje exitoso");
-        //printf("%d", respons);
-
-
+    if(code == 200){
+        printf("Conexion Exitosa\n");
     } 
 
     pthread_t thrd1, thrd2, thrd3;
@@ -255,9 +253,9 @@ int main(int arg, char *args[])
          //           break;
         response = json::parse(buffer);
         string respons = response["response"];
-        string code = response["code"];
+        int code = response["code"];
 
-        if(code == "200"){
+        if(code == 200){
             printf(" Mensajes Obtenidos");
         }
 
@@ -281,9 +279,9 @@ int main(int arg, char *args[])
          //           break;
         response = json::parse(buffer);
         string respons = response["response"];
-        string code = response["code"];
+        int code = response["code"];
 
-        if(code == "200"){
+        if(code == 200){
             printf(" Usuarios Obtenidos\n");
             for(int i=0; i<32; i++)
                 {
@@ -318,13 +316,14 @@ int main(int arg, char *args[])
         recv(st, buffer, 1024, 0);
 
         response = json::parse(buffer);
-        string code = response["code"];
+        int code = response["code"];
         string respons = response["response"];
         string ip = response["body"][0];
         string protocol = response["body"][1];
 
 
-        if(code == "200"){
+        if(code == 200){
+            printf("Usuario Obtenido\n");
             cout<<"IP del usuario: "<<ip<<"\n";
             cout<<"Estado del usuario: "<<protocol<<"\n";
             //printf("%d", respons);
@@ -335,9 +334,13 @@ int main(int arg, char *args[])
     }
 
     if(entrada == 6){
-        break;
-    }
+        printf("PARA CHAT PERSONAL UTILIZAR EL SIGUIENTE FORMATO <usuario> <mensaje>\n");
+        printf("PARA BROADCASTING UTILIZAR EL SIGUIENTE FORMATO <mensaje>\n");
+        printf("PARA CAMBIAR DE ESTADO INGRESAR <ESTADO> = 0, 1, 2\n");
+        printf("PARA DESPLEGAR INFORMACION DE UN USUARIO EN PARTICULAR <ID>\n");
+        printf("PARA LISTAR LOS USUARIOS CONECTADOS INGRESAR LA OPCION 4\n");           }
     //salir
+
     if(entrada == 7){
         printf("SALIENDO...\n");
         bandera = false;
