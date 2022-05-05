@@ -1,230 +1,401 @@
+#include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
+#include <unistd.h>
+#include <errno.h>
+#include <sys/types.h>
 #include <sys/socket.h>
 #include <netinet/in.h>
 #include <arpa/inet.h>
-#include <stdio.h>
-#include <stdlib.h>
-#include <unistd.h>
-#include <errno.h>
-#include <string.h>
 #include <pthread.h>
-#include <sys/types.h>
-#include <signal.h>
+#include <iostream>
+#include <vector>
+#include <algorithm>
+#include <iostream>
+#include "json.hpp"
+#include <iomanip>
+#include<string>
+#include<time.h>
 
-#define MAX_CLIENTS 100
-#define BUFFER_SZ 2048
+using namespace std;
+using json = nlohmann::json;
 
-static _Atomic unsigned int cli_count = 0;
-static int uid = 10;
+string message;
+string from;
+string delivered_at;
 
-/* Client structure */
-typedef struct{
-	struct sockaddr_in address;
-	int sockfd;
-	int uid;
-	char name[32];
-} client_t;
+string clientes[32][2];
+int usuarios = 0;
+string id[32][2];
 
-client_t *clients[MAX_CLIENTS];
+struct client_t
+{
+    int id;
+    char nickname[32];
+};
 
-pthread_mutex_t clients_mutex = PTHREAD_MUTEX_INITIALIZER;
+vector<client_t> clients;
 
-void str_overwrite_stdout() {
-    printf("\r%s", "> ");
-    fflush(stdout);
-}
-
-void str_trim_lf (char* arr, int length) {
-  int i;
-  for (i = 0; i < length; i++) { // trim \n
-    if (arr[i] == '\n') {
-      arr[i] = '\0';
-      break;
+bool removeClient(int id)
+{
+    for (auto it = clients.begin(); it != clients.end(); it++)
+    {
+        if ((*it).id == id)
+        {
+            clients.erase(it);
+            return true;
+        }
     }
-  }
+
+    return false;
 }
 
-void print_client_addr(struct sockaddr_in addr){
-    printf("%d.%d.%d.%d",
-        addr.sin_addr.s_addr & 0xff,
-        (addr.sin_addr.s_addr & 0xff00) >> 8,
-        (addr.sin_addr.s_addr & 0xff0000) >> 16,
-        (addr.sin_addr.s_addr & 0xff000000) >> 24);
+bool existClient(int id)
+{
+    for (auto &c : clients)
+    {
+        if (c.id == id)
+            return true;
+    }
+    return false;
 }
 
-/* Add clients to queue */
-void queue_add(client_t *cl){
-	pthread_mutex_lock(&clients_mutex);
-
-	for(int i=0; i < MAX_CLIENTS; ++i){
-		if(!clients[i]){
-			clients[i] = cl;
-			break;
-		}
-	}
-
-	pthread_mutex_unlock(&clients_mutex);
+string getAllClients(int FD)
+{
+    string ret = "-----Lista de clientes-----\nID\tUsuario\n";
+    for (auto &c : clients)
+    {
+        ret += to_string(c.id) + '\t';
+        ret += string(c.nickname);
+        if (c.id == FD)
+        {
+            ret += "\t(uno mismo)";
+        }
+        ret += '\n';
+    }
+    ret += "-----Lista de clientes-----\n";
+    return ret;
 }
 
-/* Remove clients to queue */
-void queue_remove(int uid){
-	pthread_mutex_lock(&clients_mutex);
-
-	for(int i=0; i < MAX_CLIENTS; ++i){
-		if(clients[i]){
-			if(clients[i]->uid == uid){
-				clients[i] = NULL;
-				break;
-			}
-		}
-	}
-
-	pthread_mutex_unlock(&clients_mutex);
+void sendMsg2AllClients(const char *content)
+{
+    for (auto &c : clients)
+    {
+        send(c.id, content, strlen(content), 0);
+    }
 }
 
-/* Send message to all clients except sender */
-void send_message(char *s, int uid){
-	pthread_mutex_lock(&clients_mutex);
-
-	for(int i=0; i<MAX_CLIENTS; ++i){
-		if(clients[i]){
-			if(clients[i]->uid != uid){
-				if(write(clients[i]->sockfd, s, strlen(s)) < 0){
-					perror("ERROR: write to descriptor failed");
-					break;
-				}
-			}
-		}
-	}
-
-	pthread_mutex_unlock(&clients_mutex);
+void sendMsg2ClientsExcept(const char *content, int exceptFD)
+{
+    for (auto &c : clients)
+    {
+        if (c.id == exceptFD)
+            continue;
+        send(c.id, content, strlen(content), 0);
+    }
 }
 
-/* Handle all communication with the client */
-void *handle_client(void *arg){
-	char buff_out[BUFFER_SZ];
-	char name[32];
-	int leave_flag = 0;
 
-	cli_count++;
-	client_t *cli = (client_t *)arg;
+void *recvsocket(void *arg) 
+{
+    client_t *client = (client_t *)arg;
+    int st = client->id;
 
-	// Name
-	if(recv(cli->sockfd, name, 32, 0) <= 0 || strlen(name) <  2 || strlen(name) >= 32-1){
-		printf("Didn't enter the name.\n");
-		leave_flag = 1;
-	} else{
-		strcpy(cli->name, name);
-		sprintf(buff_out, "%s has joined\n", cli->name);
-		printf("%s", buff_out);
-		send_message(buff_out, cli->uid);
-	}
+    char s[1024];
+    while (1)
+    {
+        memset(s, 0, sizeof(s));
+        int rc = recv(st, s, sizeof(s), 0);
 
-	bzero(buff_out, BUFFER_SZ);
+        if (rc <= 0)
+            break;
 
-	while(1){
-		if (leave_flag) {
-			break;
-		}
+            json request;
 
-		int receive = recv(cli->sockfd, buff_out, BUFFER_SZ, 0);
-		if (receive > 0){
-			if(strlen(buff_out) > 0){
-				send_message(buff_out, cli->uid);
+            request = json::parse(s);
 
-				str_trim_lf(buff_out, strlen(buff_out));
-				printf("%s -> %s\n", buff_out, cli->name);
-			}
-		} else if (receive == 0 || strcmp(buff_out, "exit") == 0){
-			sprintf(buff_out, "%s has left\n", cli->name);
-			printf("%s", buff_out);
-			send_message(buff_out, cli->uid);
-			leave_flag = 1;
-		} else {
-			printf("ERROR: -1\n");
-			leave_flag = 1;
-		}
+            string reques = request["request"];
 
-		bzero(buff_out, BUFFER_SZ);
-	}
 
-  /* Delete client from queue and yield thread */
-	close(cli->sockfd);
-  queue_remove(cli->uid);
-  free(cli);
-  cli_count--;
-  pthread_detach(pthread_self());
+            if(reques == "INIT_CONEX"){
+                string connect_time = request["body"][0];
+                string user_id = request["body"][1];
+                id[usuarios][0] = to_string(rc);
+                id[usuarios][1] = user_id;
+            
+                clientes[usuarios][0] = user_id;
+                clientes[usuarios][1] = "0";
+                usuarios++;
+                cout<<usuarios<<" Usuario nuevo "<<endl;
+                json response;
+                response["response"] = "INIT_CONEX";
+                response["code"] = "200";
+                //cout<<connect_time<<endl;
+                //cout<<user_id<<endl;
 
-	return NULL;
+                //fprintf(stderr, "%s", connect_time);
+                //fprintf(stderr, "%s", user_id);
+                string senviar = response.dump();
+                strcpy(s, senviar.c_str());
+                send(st, s, senviar.size()+1, 0);
+                    
+        } 
+
+
+            if(reques == "GET_CHAT"){
+                string all = request["body"];
+                //crear un usuario con el user ID
+                //clients.push_back(*client);
+
+                json response;
+                response["response"] = "GET_CHAT";
+                response["code"] = "200";
+                response["body"] = {{message, from, delivered_at}};
+
+                //fprintf(stderr, "%s", connect_time);
+                //fprintf(stderr, "%s", user_id);
+                string senviar = response.dump();
+                strcpy(s, senviar.c_str());
+                send(st, s, senviar.size()+1, 0);
+                    
+        }     
+ 
+
+            if(reques == "POST_CHAT"){
+                message = request["body"][0];
+                from = request["body"][1];
+                delivered_at = request["body"][2];
+                string to = request["body"][3];
+
+                //crear un usuario con el user ID
+                //clients.push_back(*client);
+
+                json response;
+                response["response"] = "POST_CHAT";
+                response["code"] = "200";
+
+                //fprintf(stderr, "%s", connect_time);
+                //fprintf(stderr, "%s", user_id);
+                string senviar = response.dump();
+                strcpy(s, senviar.c_str());
+                send(st, s, senviar.size()+1, 0);
+                    
+        } 
+        if(reques == "GET_USER" && request["body"] == "all"){
+        string all = request["body"];
+        //crear un usuario con el user ID
+        //clients.push_back(*client);
+
+        json response;
+        response["response"] = "GET_USER";
+        response["code"] = "200";
+        response["body"] = clientes;
+        //fprintf(stderr, "%s", connect_time);
+        //fprintf(stderr, "%s", user_id);
+        string senviar = response.dump();
+        strcpy(s, senviar.c_str());
+        send(st, s, senviar.size()+1, 0);
+
+        } 
+        if(reques == "GET_USER"){
+        cout<<"ENTRO";
+        string username = request["body"];
+        
+
+        json response;
+        response["response"] = "GET_CHAT";
+        response["code"] = "200";
+        for(int i=0; i<32; i++)
+            {
+            if(username==clientes[i][0]){
+                response["body"] = {"127.0.0.1",clientes[i][1]};
+            }
+
+            cout<<"\n";
+            }
+
+        //fprintf(stderr, "%s", connect_time);
+        //fprintf(stderr, "%s", user_id);
+        string senviar = response.dump();
+        strcpy(s, senviar.c_str());
+        send(st, s, senviar.size()+1, 0);
+                    
+        } 
+        if(reques == "PUT_STATUS"){
+                string status_obtenido = request["body"];
+
+                json response;
+                response["response"] = "PUT_STATUS";
+                response["code"] = "200";
+                cout<<"ENTRO 1";
+
+                for(int i=0; i<32; i++)
+                    {
+                    cout<<"RC"<<to_string(rc)<<"\n";
+                    cout<<"ID"<<id[i][0]<<"\n";
+                    if(to_string(rc)==id[i][0]){
+                        cout<<"ENTRO 2";
+                        if(id[i][1] == clientes[i][0]){
+                            cout<<"ENTRO 3";
+                            clientes[i][1] = status_obtenido;
+                        }
+                        response["body"] = {"127.0.0.1",clientes[i][1]};
+                    }
+
+                    cout<<"\n";
+                    }
+
+                string senviar = response.dump();
+                strcpy(s, senviar.c_str());
+                send(st, s, senviar.size()+1, 0);
+
+        } 
+ 
+        string receivedStr = string(s);
+
+        if (receivedStr == "-a\n")
+        {
+            string list = getAllClients(st);
+            send(st, list.c_str(), list.size(), 0);
+            continue;
+        }
+
+        if (receivedStr == "-q\n")
+        {
+            break;
+        }
+
+        if (receivedStr.substr(0, 3) == "-nn")
+        {
+            string newName = receivedStr.substr(4, receivedStr.size() - 5);
+            sprintf(client->nickname, "%s", newName.c_str());
+            printf("Client{%d} Cambiar nombre de usuario a%s\n", st, newName.c_str());
+
+            string reply = "Nombre de usuario cambiado! (" + newName + ")\n";
+            send(st, reply.c_str(), reply.size(), 0);
+            continue;
+        }
+
+        if (receivedStr.substr(0, 2) == "-p")
+        {
+            int toid;
+            char msg[512];
+            sscanf(receivedStr.substr(2).c_str(), "%d %s", &toid, msg);
+
+            if (toid == st)
+            {
+                send(st, "Precaucion, no se puede enviar mensajes a uno mismo\n", 41, 0);
+            }
+            else if (existClient(toid))
+            {
+                string msg2send;
+
+                msg2send = "***MENSAJE PRIVADO DEL CLIENTE{";
+                msg2send += string(client->nickname) + "}***\n" + string(msg);
+                msg2send += "\n***MENSAJE PRIVADO***\n";
+                send(toid, msg2send.c_str(), msg2send.size(), 0);
+            }
+            else
+            {
+                send(st, "PRECAUCION ID INVALIDO\n", 21, 0);
+            }
+            continue;
+        }
+
+        char content[1024];
+        sprintf(content, "CLIENTE{%d}: %s", st, s);
+        printf("%s", content);
+        sendMsg2ClientsExcept(content, st);
+    }
+
+    removeClient(st);
+    close(st);
+    pthread_cancel(pthread_self());
 }
 
-int main(int argc, char **argv){
-	if(argc != 2){
-		printf("Usage: %s <port>\n", argv[0]);
-		return EXIT_FAILURE;
-	}
+void *sendsocket(void *arg) 
+{
+    char s[1024];
+    while (1)
+    {
+        memset(s, 0, sizeof(s));
+        read(STDIN_FILENO, s, sizeof(s));
 
-	char *ip = "127.0.0.1";
-	int port = atoi(argv[1]);
-	int option = 1;
-	int listenfd = 0, connfd = 0;
-  struct sockaddr_in serv_addr;
-  struct sockaddr_in cli_addr;
-  pthread_t tid;
+        string content = "SERVER: " + string(s);
+        sendMsg2AllClients(content.c_str());
+    }
+}
 
-  /* Socket settings */
-  listenfd = socket(AF_INET, SOCK_STREAM, 0);
-  serv_addr.sin_family = AF_INET;
-  serv_addr.sin_addr.s_addr = inet_addr(ip);
-  serv_addr.sin_port = htons(port);
+int main(int arg, char *args[])
+{
+    int port = 6666;
+    if (arg >= 2)
+    {
+        port = atoi(args[1]);
+    }
 
-  /* Ignore pipe signals */
-	signal(SIGPIPE, SIG_IGN);
+    int st = socket(AF_INET, SOCK_STREAM, 0); 
+    int on = 1;
 
-	if(setsockopt(listenfd, SOL_SOCKET,(SO_REUSEPORT | SO_REUSEADDR),(char*)&option,sizeof(option)) < 0){
-		perror("ERROR: setsockopt failed");
-    return EXIT_FAILURE;
-	}
+    
+    if (setsockopt(st, SOL_SOCKET, SO_REUSEADDR, &on, sizeof(on)) == -1)
+    {
+        printf("setsockopt failed %s\n", strerror(errno));
+        return EXIT_FAILURE;
+    }
 
-	/* Bind */
-  if(bind(listenfd, (struct sockaddr*)&serv_addr, sizeof(serv_addr)) < 0) {
-    perror("ERROR: Socket binding failed");
-    return EXIT_FAILURE;
-  }
+    struct sockaddr_in addr;
+    memset(&addr, 0, sizeof(addr));
+    addr.sin_family = AF_INET;               
+    addr.sin_port = htons(port);              
+    addr.sin_addr.s_addr = htonl(INADDR_ANY); 
 
-  /* Listen */
-  if (listen(listenfd, 10) < 0) {
-    perror("ERROR: Socket listening failed");
-    return EXIT_FAILURE;
-	}
+    
+    if (bind(st, (struct sockaddr *)&addr, sizeof(addr)) == -1)
+    {
+        printf("bind failed %s\n", strerror(errno));
+        return EXIT_FAILURE;
+    }
 
-	printf("=== WELCOME TO THE CHATROOM ===\n");
+    
+    if (listen(st, 20) == -1)
+    {
+        printf("listen failed %s\n", strerror(errno));
+        return EXIT_FAILURE;
+    }
 
-	while(1){
-		socklen_t clilen = sizeof(cli_addr);
-		connfd = accept(listenfd, (struct sockaddr*)&cli_addr, &clilen);
+    pthread_t thread_send;
+    pthread_create(&thread_send, NULL, sendsocket, NULL);
 
-		/* Check if max clients is reached */
-		if((cli_count + 1) == MAX_CLIENTS){
-			printf("Max clients reached. Rejected: ");
-			print_client_addr(cli_addr);
-			printf(":%d\n", cli_addr.sin_port);
-			close(connfd);
-			continue;
-		}
+    int client_st = 0;
+    struct sockaddr_in client_addr;
 
-		/* Client settings */
-		client_t *cli = (client_t *)malloc(sizeof(client_t));
-		cli->address = cli_addr;
-		cli->sockfd = connfd;
-		cli->uid = uid++;
+    while (1)
+    {
+        memset(&client_addr, 0, sizeof(client_addr));
+        socklen_t len = sizeof(client_addr);
 
-		/* Add client to the queue and fork thread */
-		queue_add(cli);
-		pthread_create(&tid, NULL, &handle_client, (void*)cli);
+        client_st = accept(st, (struct sockaddr *)&client_addr, &len);
 
-		/* Reduce CPU usage */
-		sleep(1);
-	}
+        if (client_st == -1)
+        {
+            printf("Client connection failed %s\n", strerror(errno));
+            return EXIT_FAILURE;
+        }
 
-	return EXIT_SUCCESS;
+        printf("New Client from: %s\n", inet_ntoa(client_addr.sin_addr));
+
+        client_t *client = (client_t *)malloc(sizeof(client_t));
+        client->id = client_st;
+        sprintf(client->nickname, "%d", client_st);
+
+        clients.push_back(*client);
+
+        pthread_t thrd1;
+        pthread_create(&thrd1, NULL, recvsocket, client);
+
+    }
+
+    close(st);
+    return EXIT_SUCCESS;
 }
