@@ -1,3 +1,4 @@
+
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -26,13 +27,15 @@ string delivered_at;
 
 string clientes[32][2];
 int usuarios = 0;
-string id[32][2];
+string id[32][3];
 
 struct client_t
 {
     int id;
     char nickname[32];
 };
+
+struct sockaddr_in client_addr;
 
 vector<client_t> clients;
 
@@ -120,7 +123,8 @@ void *recvsocket(void *arg)
             if(reques == "INIT_CONEX"){
                 string connect_time = request["body"][0];
                 string user_id = request["body"][1];
-                id[usuarios][0] = to_string(rc);
+                //cout<<rc;
+                id[usuarios][0] = to_string(st);
                 id[usuarios][1] = user_id;
             
                 clientes[usuarios][0] = user_id;
@@ -129,12 +133,8 @@ void *recvsocket(void *arg)
                 cout<<usuarios<<" Usuario nuevo "<<endl;
                 json response;
                 response["response"] = "INIT_CONEX";
-                response["code"] = "200";
-                //cout<<connect_time<<endl;
-                //cout<<user_id<<endl;
+                response["code"] = 200;
 
-                //fprintf(stderr, "%s", connect_time);
-                //fprintf(stderr, "%s", user_id);
                 string senviar = response.dump();
                 strcpy(s, senviar.c_str());
                 send(st, s, senviar.size()+1, 0);
@@ -142,7 +142,7 @@ void *recvsocket(void *arg)
         } 
 
 
-            if(reques == "GET_CHAT"){
+            else if(reques == "GET_CHAT"){
                 string all = request["body"];
                 //crear un usuario con el user ID
                 //clients.push_back(*client);
@@ -161,7 +161,7 @@ void *recvsocket(void *arg)
         }     
  
 
-            if(reques == "POST_CHAT"){
+            else if(reques == "POST_CHAT"){
                 message = request["body"][0];
                 from = request["body"][1];
                 delivered_at = request["body"][2];
@@ -181,14 +181,16 @@ void *recvsocket(void *arg)
                 send(st, s, senviar.size()+1, 0);
                     
         } 
-        if(reques == "GET_USER" && request["body"] == "all"){
+        else if(reques == "GET_USER" && request["body"] == "all"){
+                            cout<<st;
+                cout<<"Usuarios Solicitados"<<endl;
         string all = request["body"];
         //crear un usuario con el user ID
         //clients.push_back(*client);
 
         json response;
         response["response"] = "GET_USER";
-        response["code"] = "200";
+        response["code"] = 200;
         response["body"] = clientes;
         //fprintf(stderr, "%s", connect_time);
         //fprintf(stderr, "%s", user_id);
@@ -197,22 +199,20 @@ void *recvsocket(void *arg)
         send(st, s, senviar.size()+1, 0);
 
         } 
-        if(reques == "GET_USER"){
-        cout<<"ENTRO";
+        else if(reques == "GET_USER"){
+        cout<<"Informacion de Usuario Solicitada"<<endl;
         string username = request["body"];
         
 
         json response;
         response["response"] = "GET_CHAT";
-        response["code"] = "200";
-        for(int i=0; i<32; i++)
-            {
+        response["code"] = 200;
+        for(int i=0; i<32; i++){
             if(username==clientes[i][0]){
-                response["body"] = {"127.0.0.1",clientes[i][1]};
-            }
 
-            cout<<"\n";
+                response["body"] = {id[i][2],clientes[i][1]};
             }
+        }
 
         //fprintf(stderr, "%s", connect_time);
         //fprintf(stderr, "%s", user_id);
@@ -221,22 +221,23 @@ void *recvsocket(void *arg)
         send(st, s, senviar.size()+1, 0);
                     
         } 
-        if(reques == "PUT_STATUS"){
+        else if(reques == "PUT_STATUS"){
+                cout<<st<<"%d";
                 string status_obtenido = request["body"];
 
                 json response;
                 response["response"] = "PUT_STATUS";
-                response["code"] = "200";
-                cout<<"ENTRO 1";
+                response["code"] = 200;
+                //cout<<"ENTRO 1";
 
                 for(int i=0; i<32; i++)
                     {
-                    cout<<"RC"<<to_string(rc)<<"\n";
-                    cout<<"ID"<<id[i][0]<<"\n";
+                    //cout<<"RC"<<to_string(rc)<<"\n";
+                    //cout<<"ID"<<id[i][0]<<"\n";
                     if(to_string(rc)==id[i][0]){
-                        cout<<"ENTRO 2";
+                        //cout<<"ENTRO 2";
                         if(id[i][1] == clientes[i][0]){
-                            cout<<"ENTRO 3";
+                          //  cout<<"ENTRO 3";
                             clientes[i][1] = status_obtenido;
                         }
                         response["body"] = {"127.0.0.1",clientes[i][1]};
@@ -249,7 +250,7 @@ void *recvsocket(void *arg)
                 strcpy(s, senviar.c_str());
                 send(st, s, senviar.size()+1, 0);
 
-        } 
+        }/* 
  
         string receivedStr = string(s);
 
@@ -305,7 +306,7 @@ void *recvsocket(void *arg)
         char content[1024];
         sprintf(content, "CLIENTE{%d}: %s", st, s);
         printf("%s", content);
-        sendMsg2ClientsExcept(content, st);
+        sendMsg2ClientsExcept(content, st);*/
     }
 
     removeClient(st);
@@ -368,7 +369,6 @@ int main(int arg, char *args[])
     pthread_create(&thread_send, NULL, sendsocket, NULL);
 
     int client_st = 0;
-    struct sockaddr_in client_addr;
 
     while (1)
     {
@@ -384,7 +384,7 @@ int main(int arg, char *args[])
         }
 
         printf("New Client from: %s\n", inet_ntoa(client_addr.sin_addr));
-
+        id[usuarios][2] = inet_ntoa(client_addr.sin_addr);
         client_t *client = (client_t *)malloc(sizeof(client_t));
         client->id = client_st;
         sprintf(client->nickname, "%d", client_st);
