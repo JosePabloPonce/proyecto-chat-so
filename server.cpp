@@ -27,7 +27,10 @@ string delivered_at;
 string clientes[32][2];
 int usuarios = 0;
 string id[32][3];
+string chat_almacenados[50][3];
 
+
+int contador_mensajes = 0;
 struct client_t
 {
     int id;
@@ -148,8 +151,8 @@ void *recvsocket(void *arg)
 
                 json response;
                 response["response"] = "GET_CHAT";
-                response["code"] = "200";
-                response["body"] = {{message, from, delivered_at}};
+                response["code"] = 200;
+                response["body"] = chat_almacenados;
 
                 //fprintf(stderr, "%s", connect_time);
                 //fprintf(stderr, "%s", user_id);
@@ -171,16 +174,27 @@ void *recvsocket(void *arg)
 
                 json response;
                 response["response"] = "POST_CHAT";
-                response["code"] = "200";
+                response["code"] = 200;
                 cout<<"Mensaje: "<<message<<" from: "<<from<< " Fecha: "<<delivered_at<< " A: "<<to<<endl;
-
+                chat_almacenados[contador_mensajes][0] = message;
+                chat_almacenados[contador_mensajes][1] = from;
+                chat_almacenados[contador_mensajes][2] = delivered_at;
+                contador_mensajes++;
                 //fprintf(stderr, "%s", connect_time);
                 //fprintf(stderr, "%s", user_id);
                 string senviar = response.dump();
                 strcpy(s, senviar.c_str());
                 send(st, s, senviar.size()+1, 0);
-                
-                    
+                response["response"] = "NEW_MESSAGE";
+                response["body"] = {{message, from, delivered_at, "all" }};
+                senviar = response.dump();
+                strcpy(s, senviar.c_str());
+
+                for(int i=0; i<32; i++){
+                    if(id[i][0] != to_string(st) && id[i][0] != ""){
+                        send(stoi(id[i][0]), s, senviar.size()+1, 0);
+                    }
+                }                               
         } 
         else if(reques == "GET_USER" && request["body"] == "all"){
                 cout<<"Usuarios Solicitados"<<endl;
@@ -205,7 +219,7 @@ void *recvsocket(void *arg)
         
 
         json response;
-        response["response"] = "GET_CHAT";
+        response["response"] = "GET_USER";
         response["code"] = 200;
         for(int i=0; i<32; i++){
             if(username==clientes[i][0]){
@@ -313,6 +327,7 @@ void *sendsocket(void *arg)
 
 int main(int arg, char *args[])
 {
+
     int port = 6666;
     if (arg >= 2)
     {
