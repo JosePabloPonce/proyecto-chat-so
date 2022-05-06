@@ -22,12 +22,19 @@ using json = nlohmann::json;
 char *usuario;
 string status;
 
+struct arg_struct {
+    int arg1;
+    int arg2;
+}args;
+
 void *recvsocket(void *arg) 
 {
+    
     int st = *(int *)arg;
     json request;
     json response;
     char buffer[1024];
+
     request["request"] = "GET_CHAT";
     request["body"] = "all";
 
@@ -35,21 +42,49 @@ void *recvsocket(void *arg)
 
     strcpy(buffer, parsed_request.c_str());
     send(st, buffer, parsed_request.size()+1, 0);
-
-        while(1){
-
+    while(1){
         int rc = recv(st, buffer, 1024, 0);
-       // if (rc <= 0) 
-         //           break;
+        
         response = json::parse(buffer);
         string respons = response["response"];
-        string code = response["code"];
-        string message = response["body"][0][0];
-        string from = response["body"][0][1];
-        string delivered_at = response["body"][0][2];
 
-        if(code == "200"){
-            printf(" Mensajes Obtenidos\n");
+        if(respons == "GET_CHAT"){
+            int code = response["code"];
+
+            if(code == 200){
+                printf(" Mensajes Obtenidos\n");
+                for(int i=0; i<50; i++){
+                    for(int j=0; j<3; j++){
+                        if(response["body"][i][j] != ""){
+                            if(j==0){
+                            cout<<" "<<response["body"][i][j];
+                            }    
+                            if(j==1){
+                            cout<<" "<<response["body"][i][j];
+                            }                               
+                            if(j==2){
+                            cout<<" "<<response["body"][i][j];
+                            printf("\n");
+                            }    
+                        }
+                    }
+                }
+            }
+        }
+        else if(respons == "NEW_MESSAGE"){
+            string message = response["body"][0][0];
+            string from = response["body"][0][1];
+            string delivered_at = response["body"][0][2];
+            string to = response["body"][0][3];
+            //printf("Mensaje Obtenido\n");
+            cout<<message<<from<<delivered_at<<endl;
+    
+        }
+        else if(respons == "POST_CHAT"){
+            int code = response["code"];
+            if(code == 200){
+                printf("Enviado\n");
+            }
         }
     }
     
@@ -74,11 +109,12 @@ void *sendsocket(void *arg)
         memset(s, 0, sizeof(s));
         read(STDIN_FILENO, s, sizeof(s));
         //cin>>message;
+        //scanf("%s", s);
         string from;
         from = usuario;
         time_t delivered_at = time(0);
         string toUser = "all";
-        cout<<s<<from<<ctime(&delivered_at)<<toUser<<endl;
+        //cout<<s<<from<<ctime(&delivered_at)<<toUser<<endl;
         request["body"] = {s, from, ctime(&delivered_at), toUser};
         string parsed_request = request.dump();
 
@@ -87,21 +123,22 @@ void *sendsocket(void *arg)
         
         
         
-        memset(buffer, 0, sizeof(buffer));
+        /*memset(buffer, 0, sizeof(buffer));
         cout<<"LLEGO"<<endl;
         int rc = recv(st, buffer, sizeof(buffer), 0);
-        if(rc<0){
-            break;
-        }
+        //if(rc<0){
+          //  break;
+        //}
         cout<<"LLEGO2"<<endl;
         response = json::parse(buffer);
         string respons = response["response"];
-        string code = response["code"];
+        int code = response["code"];
         cout<<"RESPUESTA SERVER: "<<respons<<code<<endl;
 
-        if(code == "200"){
+        if(code == 200){
             printf(" Mensaje Enviado");
-            } 
+            }*/
+             
     }
     
         
@@ -166,13 +203,14 @@ int main(int arg, char *args[])
     recv(st, buffer, 1024, 0);
 
     response = json::parse(buffer);
-    int code = response["code"];
     string respons = response["response"];
 
-
-    if(code == 200){
-        printf("Conexion Exitosa\n");
-    } 
+    if (response =="INIT_CONEX"){
+        int code = response["code"];
+        if(code == 200){
+            printf("Conexion Exitosa\n");
+        } 
+    }
 
     pthread_t thrd1, thrd2, thrd3;
     bool bandera = true;
@@ -196,15 +234,59 @@ int main(int arg, char *args[])
     
 
     
-    printf( "Introduzca la opcion que desea ejecutar (1-7): \n");
-    scanf("%d", &entrada);
-    printf( "---------------------------------------------------\n");
-    printf( "\n");
+        printf( "Introduzca la opcion que desea ejecutar (1-7): \n");
+        scanf("%d", &entrada);
+        printf( "---------------------------------------------------\n");
+        printf( "\n");
 
  
-    //Mensaje directo
-    if(entrada == 1){
-    	printf("=== BIENVENIDO AL CHAT GRUPAL ===\n");
+        //Mensaje directo
+        if(entrada == 1){
+            printf("=== BIENVENIDO AL CHAT GRUPAL ===\n");
+
+            /*while(1){
+                char s[1024];
+                json request;
+                json response;
+                char buffer[1024];
+                request["request"] = "POST_CHAT";
+
+                //memset(s, 0, sizeof(s));
+                //read(STDIN_FILENO, s, sizeof(s));
+                //cin>>message;
+                scanf("%s", s);
+                string from;
+                from = usuario;
+                time_t delivered_at = time(0);
+                string toUser = "all";
+                //cout<<s<<from<<ctime(&delivered_at)<<toUser<<endl;
+                request["body"] = {s, from, ctime(&delivered_at), toUser};
+                string parsed_request = request.dump();
+
+                strcpy(buffer, parsed_request.c_str());
+                send(st, buffer, parsed_request.size()+1, 0);
+                
+                
+                
+                //memset(buffer, 0, sizeof(buffer));
+                cout<<"LLEGO"<<endl;
+                int rc = recv(st, buffer, sizeof(buffer), 0);
+                //if(rc<0){
+                //  break;
+                //}
+                cout<<"LLEGO2"<<endl;
+                response = json::parse(buffer);
+                string respons = response["response"];
+                string code = response["code"];
+                cout<<"RESPUESTA SERVER: "<<respons<<code<<endl;
+
+                if(code == "200"){
+                    printf(" Mensaje Enviado\n");
+                    } 
+            }*/
+
+
+
         pthread_create(&thrd2, NULL, sendsocket, &st);
         pthread_create(&thrd1, NULL, recvsocket, &st);
         pthread_join(thrd1, NULL);
@@ -275,14 +357,14 @@ int main(int arg, char *args[])
         send(st, buffer, parsed_request.size()+1, 0);
 
         int rc = recv(st, buffer, 1024, 0);
-       // if (rc <= 0) 
-         //           break;
         response = json::parse(buffer);
-        string respons = response["response"];
-        int code = response["code"];
 
-        if(code == 200){
-            printf(" Cambio el estatus\n");
+        string respons = response["response"];
+        if (respons == "PUT_STATUS"){
+            int code = response["code"];
+            if(code == 200){
+                printf(" Cambio el estatus\n");
+            }
         }
 
     }
@@ -305,18 +387,22 @@ int main(int arg, char *args[])
          //           break;
         response = json::parse(buffer);
         string respons = response["response"];
+        if(respons=="GET_USER"){
         int code = response["code"];
 
-        if(code == 200){
-            printf(" Usuarios Obtenidos\n");
-            for(int i=0; i<32; i++)
-                {
-                for(int j=0; j<2; j++)
-                {
-                    cout<<" "<<response["body"][i][j]<<" ";
+            if(code == 200){
+                printf(" Usuarios Obtenidos\n");
+                for(int i=0; i<32; i++){
+                    for(int j=0; j<2; j++){
+                        if(response["body"][i][j] != ""){
+                            cout<<" "<<response["body"][i][j]<<" ";
+                            if(j==1){
+                                cout<<"\n";
+                            }    
+                        }
+                    }
                 }
-                cout<<"\n";
-        }
+            }
         } 
         //obtenerInfoAllUsers(sockfd, buffer);
     }
@@ -342,21 +428,20 @@ int main(int arg, char *args[])
         recv(st, buffer, 1024, 0);
 
         response = json::parse(buffer);
-        int code = response["code"];
         string respons = response["response"];
-        string ip = response["body"][0];
-        string protocol = response["body"][1];
+        if(respons == "GET_USER"){
+            int code = response["code"];
+            string ip = response["body"][0];
+            string protocol = response["body"][1];
+
+            if(code == 200){
+                printf("Usuario Obtenido\n");
+                cout<<"IP del usuario: "<<ip<<"\n";
+                cout<<"Estado del usuario: "<<protocol<<"\n";
 
 
-        if(code == 200){
-            printf("Usuario Obtenido\n");
-            cout<<"IP del usuario: "<<ip<<"\n";
-            cout<<"Estado del usuario: "<<protocol<<"\n";
-            //printf("%d", respons);
-
-
-        } 
-        //obtenerInfoUsuario(IdGlobal, usuarioInf, sockfd, buffer);
+            } 
+        }
     }
 
     if(entrada == 6){
@@ -364,7 +449,8 @@ int main(int arg, char *args[])
         printf("PARA BROADCASTING UTILIZAR EL SIGUIENTE FORMATO <mensaje>\n");
         printf("PARA CAMBIAR DE ESTADO INGRESAR <ESTADO> = 0, 1, 2\n");
         printf("PARA DESPLEGAR INFORMACION DE UN USUARIO EN PARTICULAR <ID>\n");
-        printf("PARA LISTAR LOS USUARIOS CONECTADOS INGRESAR LA OPCION 4\n");           }
+        printf("PARA LISTAR LOS USUARIOS CONECTADOS INGRESAR LA OPCION 4\n");           
+    }
     //salir
 
     if(entrada == 7){
