@@ -1,4 +1,3 @@
-
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -21,22 +20,23 @@
 using namespace std;
 using json = nlohmann::json;
 char *usuario;
+string status;
 
 void *recvsocket(void *arg) 
 {
     int st = *(int *)arg;
+    json request;
+    json response;
+    char buffer[1024];
+    request["request"] = "GET_CHAT";
+    request["body"] = "all";
+
+    string parsed_request = request.dump();
+
+    strcpy(buffer, parsed_request.c_str());
+    send(st, buffer, parsed_request.size()+1, 0);
 
         while(1){
-        json request;
-        json response;
-        char buffer[1024];
-        request["request"] = "GET_CHAT";
-        request["body"] = "all";
-
-        string parsed_request = request.dump();
-
-        strcpy(buffer, parsed_request.c_str());
-        send(st, buffer, parsed_request.size()+1, 0);
 
         int rc = recv(st, buffer, 1024, 0);
        // if (rc <= 0) 
@@ -49,7 +49,7 @@ void *recvsocket(void *arg)
         string delivered_at = response["body"][0][2];
 
         if(code == "200"){
-            printf(" Mensajes Obtenidos");
+            printf(" Mensajes Obtenidos\n");
         }
     }
     
@@ -65,44 +65,69 @@ void *sendsocket(void *arg)
     // send(st, client_username, strlen(client_username), 0);
 
     char s[1024];
-    
+    while(1){
         json request;
         json response;
         char buffer[1024];
         request["request"] = "POST_CHAT";
 
-        string message;
-        cin>>message;
+        memset(s, 0, sizeof(s));
+        read(STDIN_FILENO, s, sizeof(s));
+        //cin>>message;
         string from;
-        from += usuario;
+        from = usuario;
         time_t delivered_at = time(0);
-        string to = "all";
-        request["body"] = {message, from, ctime(&delivered_at), to};
-
+        string toUser = "all";
+        cout<<s<<from<<ctime(&delivered_at)<<toUser<<endl;
+        request["body"] = {s, from, ctime(&delivered_at), toUser};
         string parsed_request = request.dump();
 
         strcpy(buffer, parsed_request.c_str());
         send(st, buffer, parsed_request.size()+1, 0);
-
-        int rc = recv(st, buffer, 1024, 0);
-        //if (rc <= 0) 
-          //          break;
+        
+        
+        
+        memset(buffer, 0, sizeof(buffer));
+        cout<<"LLEGO"<<endl;
+        int rc = recv(st, buffer, sizeof(buffer), 0);
+        if(rc<0){
+            break;
+        }
+        cout<<"LLEGO2"<<endl;
         response = json::parse(buffer);
         string respons = response["response"];
         string code = response["code"];
+        cout<<"RESPUESTA SERVER: "<<respons<<code<<endl;
 
         if(code == "200"){
             printf(" Mensaje Enviado");
             } 
+    }
+    
         
+}
+
+string changeStatus(string opcion){
+    if(opcion == "0"){
+        status = "ACTIVO";
+
+    }
+    if(opcion == "1"){
+        status = "OCUPADO";
+
+    }
+    if(opcion == "2"){
+        status = "INACTIVO";
+    }
+    return status;
 }
 
 int main(int arg, char *args[])
 {
     string ip = "0.0.0.0";
     int port = 6666;
-    char status[] = "ACTIVO";
     int entrada;
+    changeStatus("0");
 
     if (arg >= 3)
     {
@@ -156,7 +181,7 @@ int main(int arg, char *args[])
     {
         printf( "---------------------------------------------------\n");
         printf( "Usuario: %s \n",usuario);
-        printf( "ESTATUS ACTUAL: %s \n", status);
+        cout<<"ESTATUS ACTUAL: "<<status<<endl;
         printf( "\n");
         printf( "Ingrese el numero de la opcion que deasea ejecutar:\n");
         printf( "1. Chatear con todos los usuarios (broadcasting)\n");
@@ -228,7 +253,7 @@ int main(int arg, char *args[])
     if(entrada == 3){
         json request;
         json response;
-        string status; 
+        status = ""; 
 
         char buffer[1024];
         request["request"] = "PUT_STATUS";
@@ -238,10 +263,11 @@ int main(int arg, char *args[])
         printf( "1. Ocupado\n");
         printf( "2. Inactivo\n");
         printf( "\n");
-        printf( "Introduzca la opcion que desea ejecutar (1-3): \n");
+        printf( "Introduzca la opcion que desea ejecutar (0-2): \n");
         printf( "\n");
         cin>>status;
         request["body"] = status;
+        changeStatus(status);
 
         string parsed_request = request.dump();
 
@@ -256,7 +282,7 @@ int main(int arg, char *args[])
         int code = response["code"];
 
         if(code == 200){
-            printf(" Mensajes Obtenidos");
+            printf(" Cambio el estatus\n");
         }
 
     }
