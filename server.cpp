@@ -1,4 +1,3 @@
-
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -107,7 +106,7 @@ void *recvsocket(void *arg)
     char s[1024];
     while (1)
     {
-        memset(s, 0, sizeof(s));
+        //memset(s, 0, sizeof(s));
         int rc = recv(st, s, sizeof(s), 0);
 
         if (rc <= 0)
@@ -130,7 +129,7 @@ void *recvsocket(void *arg)
                 clientes[usuarios][0] = user_id;
                 clientes[usuarios][1] = "0";
                 usuarios++;
-                cout<<usuarios<<" Usuario nuevo "<<endl;
+                cout<<usuarios<<" Usuario conectado "<<endl;
                 json response;
                 response["response"] = "INIT_CONEX";
                 response["code"] = 200;
@@ -173,16 +172,17 @@ void *recvsocket(void *arg)
                 json response;
                 response["response"] = "POST_CHAT";
                 response["code"] = "200";
+                cout<<"Mensaje: "<<message<<" from: "<<from<< " Fecha: "<<delivered_at<< " A: "<<to<<endl;
 
                 //fprintf(stderr, "%s", connect_time);
                 //fprintf(stderr, "%s", user_id);
                 string senviar = response.dump();
                 strcpy(s, senviar.c_str());
                 send(st, s, senviar.size()+1, 0);
+                
                     
         } 
         else if(reques == "GET_USER" && request["body"] == "all"){
-                            cout<<st;
                 cout<<"Usuarios Solicitados"<<endl;
         string all = request["body"];
         //crear un usuario con el user ID
@@ -222,7 +222,6 @@ void *recvsocket(void *arg)
                     
         } 
         else if(reques == "PUT_STATUS"){
-                cout<<st<<"%d";
                 string status_obtenido = request["body"];
 
                 json response;
@@ -232,18 +231,11 @@ void *recvsocket(void *arg)
 
                 for(int i=0; i<32; i++)
                     {
-                    //cout<<"RC"<<to_string(rc)<<"\n";
-                    //cout<<"ID"<<id[i][0]<<"\n";
-                    if(to_string(rc)==id[i][0]){
-                        //cout<<"ENTRO 2";
+                    if(to_string(st)==id[i][0]){
                         if(id[i][1] == clientes[i][0]){
-                          //  cout<<"ENTRO 3";
                             clientes[i][1] = status_obtenido;
                         }
-                        response["body"] = {"127.0.0.1",clientes[i][1]};
                     }
-
-                    cout<<"\n";
                     }
 
                 string senviar = response.dump();
@@ -253,36 +245,30 @@ void *recvsocket(void *arg)
         }/* 
  
         string receivedStr = string(s);
-
         if (receivedStr == "-a\n")
         {
             string list = getAllClients(st);
             send(st, list.c_str(), list.size(), 0);
             continue;
         }
-
         if (receivedStr == "-q\n")
         {
             break;
         }
-
         if (receivedStr.substr(0, 3) == "-nn")
         {
             string newName = receivedStr.substr(4, receivedStr.size() - 5);
             sprintf(client->nickname, "%s", newName.c_str());
             printf("Client{%d} Cambiar nombre de usuario a%s\n", st, newName.c_str());
-
             string reply = "Nombre de usuario cambiado! (" + newName + ")\n";
             send(st, reply.c_str(), reply.size(), 0);
             continue;
         }
-
         if (receivedStr.substr(0, 2) == "-p")
         {
             int toid;
             char msg[512];
             sscanf(receivedStr.substr(2).c_str(), "%d %s", &toid, msg);
-
             if (toid == st)
             {
                 send(st, "Precaucion, no se puede enviar mensajes a uno mismo\n", 41, 0);
@@ -290,7 +276,6 @@ void *recvsocket(void *arg)
             else if (existClient(toid))
             {
                 string msg2send;
-
                 msg2send = "***MENSAJE PRIVADO DEL CLIENTE{";
                 msg2send += string(client->nickname) + "}***\n" + string(msg);
                 msg2send += "\n***MENSAJE PRIVADO***\n";
@@ -302,7 +287,6 @@ void *recvsocket(void *arg)
             }
             continue;
         }
-
         char content[1024];
         sprintf(content, "CLIENTE{%d}: %s", st, s);
         printf("%s", content);
