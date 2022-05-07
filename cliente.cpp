@@ -15,6 +15,7 @@
 #include <iomanip>
 #include<string>
 #include<time.h>
+#include <cstring> 
 
 
 using namespace std;
@@ -27,16 +28,19 @@ struct arg_struct {
     int arg2;
 }args;
 
-void *recvsocket(void *arg) 
+char destinatario[1024];
+
+void *recvsocketpriv(void *arg) 
 {
     
     int st = *(int *)arg;
     json request;
     json response;
     char buffer[1024];
+    /**/
 
     request["request"] = "GET_CHAT";
-    request["body"] = "all";
+    request["body"] = destinatario;
 
     string parsed_request = request.dump();
 
@@ -53,7 +57,7 @@ void *recvsocket(void *arg)
 
             if(code == 200){
                 printf(" Mensajes Obtenidos\n");
-                for(int i=0; i<50; i++){
+                for(int i=0; i<sizeof(response["body"]); i++){
                     for(int j=0; j<3; j++){
                         if(response["body"][i][j] != ""){
                             if(j==0){
@@ -90,6 +94,121 @@ void *recvsocket(void *arg)
     
 }
 
+void *recvsocket(void *arg) 
+{
+    
+    int st = *(int *)arg;
+    json request;
+    json response;
+    char buffer[1024];
+
+    request["request"] = "GET_CHAT";
+    request["body"] = "all";
+
+    string parsed_request = request.dump();
+
+    strcpy(buffer, parsed_request.c_str());
+    send(st, buffer, parsed_request.size()+1, 0);
+    while(1){
+        int rc = recv(st, buffer, 1024, 0);
+        
+        response = json::parse(buffer);
+        string respons = response["response"];
+
+        if(respons == "GET_CHAT"){
+            int code = response["code"];
+
+            if(code == 200){
+                printf(" Mensajes Obtenidos\n");
+                for(int i=0; i<sizeof(response["body"]); i++){
+                    for(int j=0; j<3; j++){
+                        if(response["body"][i][j] != ""){
+                            if(j==0){
+                            cout<<" "<<response["body"][i][j];
+                            }    
+                            if(j==1){
+                            cout<<" "<<response["body"][i][j];
+                            }                               
+                            if(j==2){
+                            cout<<" "<<response["body"][i][j];
+                            printf("\n");
+                            }    
+                        }
+                    }
+                }
+            }
+        }
+        else if(respons == "NEW_MESSAGE"){
+            string message = response["body"][0][0];
+            string from = response["body"][0][1];
+            string delivered_at = response["body"][0][2];
+            string to = response["body"][0][3];
+            //printf("Mensaje Obtenido\n");
+            cout<<message<<from<<delivered_at<<endl;
+    
+        }
+        else if(respons == "POST_CHAT"){
+            int code = response["code"];
+            if(code == 200){
+                printf("Enviado\n");
+            }
+        }
+    }
+    
+}
+
+void *sendsocketpriv(void *arg) 
+{
+    int st = *(int *)arg;
+
+    // char client_username[100];
+    // sprintf(client_username, "NEW_CLIENT_USERNAME %s", "Amy");
+    // send(st, client_username, strlen(client_username), 0);
+
+    char s[1024];
+    while(1){
+        json request;
+        json response;
+        char buffer[1024];
+        request["request"] = "POST_CHAT";
+        //cout<<"Ingrese el mensaje: \n"
+        memset(s, 0, sizeof(s));
+        read(STDIN_FILENO, s, sizeof(s));
+
+        //cin>>message;
+        //scanf("%s", s);
+        string from;
+        from = usuario;
+        time_t delivered_at = time(0);
+        string toUser = destinatario;
+        //cout<<s<<from<<ctime(&delivered_at)<<toUser<<endl;
+        request["body"] = {s, from, ctime(&delivered_at), toUser};
+        string parsed_request = request.dump();
+
+        strcpy(buffer, parsed_request.c_str());
+        send(st, buffer, parsed_request.size()+1, 0);
+        
+        
+        
+        /*memset(buffer, 0, sizeof(buffer));
+        cout<<"LLEGO"<<endl;
+        int rc = recv(st, buffer, sizeof(buffer), 0);
+        //if(rc<0){
+          //  break;
+        //}
+        cout<<"LLEGO2"<<endl;
+        response = json::parse(buffer);
+        string respons = response["response"];
+        int code = response["code"];
+        cout<<"RESPUESTA SERVER: "<<respons<<code<<endl;
+        if(code == 200){
+            printf(" Mensaje Enviado");
+            }*/
+             
+    }
+    
+        
+}
 
 void *sendsocket(void *arg) 
 {
@@ -134,7 +253,6 @@ void *sendsocket(void *arg)
         string respons = response["response"];
         int code = response["code"];
         cout<<"RESPUESTA SERVER: "<<respons<<code<<endl;
-
         if(code == 200){
             printf(" Mensaje Enviado");
             }*/
@@ -205,11 +323,15 @@ int main(int arg, char *args[])
     response = json::parse(buffer);
     string respons = response["response"];
 
-    if (response =="INIT_CONEX"){
+    if (respons =="INIT_CONEX"){
         int code = response["code"];
         if(code == 200){
             printf("Conexion Exitosa\n");
         } 
+        else if(code == 101){
+            printf("Usuario ya registrado\n");
+            exit(0);
+        }
     }
 
     pthread_t thrd1, thrd2, thrd3;
@@ -250,7 +372,6 @@ int main(int arg, char *args[])
                 json response;
                 char buffer[1024];
                 request["request"] = "POST_CHAT";
-
                 //memset(s, 0, sizeof(s));
                 //read(STDIN_FILENO, s, sizeof(s));
                 //cin>>message;
@@ -262,7 +383,6 @@ int main(int arg, char *args[])
                 //cout<<s<<from<<ctime(&delivered_at)<<toUser<<endl;
                 request["body"] = {s, from, ctime(&delivered_at), toUser};
                 string parsed_request = request.dump();
-
                 strcpy(buffer, parsed_request.c_str());
                 send(st, buffer, parsed_request.size()+1, 0);
                 
@@ -279,7 +399,6 @@ int main(int arg, char *args[])
                 string respons = response["response"];
                 string code = response["code"];
                 cout<<"RESPUESTA SERVER: "<<respons<<code<<endl;
-
                 if(code == "200"){
                     printf(" Mensaje Enviado\n");
                     } 
@@ -290,6 +409,7 @@ int main(int arg, char *args[])
         pthread_create(&thrd2, NULL, sendsocket, &st);
         pthread_create(&thrd1, NULL, recvsocket, &st);
         pthread_join(thrd1, NULL);
+        cout<<"Hola"<<endl;
         /*while(1){
         char s[1024];
         json request;
@@ -326,6 +446,11 @@ int main(int arg, char *args[])
     //Broadcast
     if(entrada == 2){
         printf("=== BIENVENIDO A LA SALA PRIVADA ===\n");
+        cout<<"Ingrese el usuario\n";
+        scanf("%s",destinatario);
+        pthread_create(&thrd2, NULL, sendsocketpriv, &st);
+        pthread_create(&thrd1, NULL, recvsocketpriv, &st);
+        pthread_join(thrd1, NULL);        
         break;
     }
  
@@ -392,7 +517,7 @@ int main(int arg, char *args[])
 
             if(code == 200){
                 printf(" Usuarios Obtenidos\n");
-                for(int i=0; i<32; i++){
+                for(int i=0; i<sizeof(response["body"]); i++){
                     for(int j=0; j<2; j++){
                         if(response["body"][i][j] != ""){
                             cout<<" "<<response["body"][i][j]<<" ";
@@ -454,7 +579,23 @@ int main(int arg, char *args[])
     //salir
 
     if(entrada == 7){
-        printf("SALIENDO...\n");
+        json request;
+        json response;
+        char buffer[1024];
+        request["request"] = "END_CONEX";
+        string parsed_request = request.dump();
+
+        strcpy(buffer, parsed_request.c_str());
+        send(st, buffer, parsed_request.size()+1, 0);
+        recv(st, buffer, 1024, 0);
+
+        response = json::parse(buffer);
+        string respons = response["response"];
+        int code = response["code"];
+        if(respons == "END_CONEX" && code == 200){
+            printf("SALIENDO...\n");
+        }
+        
         bandera = false;
         break;
     
