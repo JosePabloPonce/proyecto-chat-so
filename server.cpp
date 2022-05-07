@@ -41,6 +41,64 @@ struct sockaddr_in client_addr;
 
 vector<client_t> clients;
 
+bool removeClient(int id)
+{
+    for (auto it = clients.begin(); it != clients.end(); it++)
+    {
+        if ((*it).id == id)
+        {
+            clients.erase(it);
+            return true;
+        }
+    }
+
+    return false;
+}
+
+bool existClient(int id)
+{
+    for (auto &c : clients)
+    {
+        if (c.id == id)
+            return true;
+    }
+    return false;
+}
+
+string getAllClients(int FD)
+{
+    string ret = "-----Lista de clientes-----\nID\tUsuario\n";
+    for (auto &c : clients)
+    {
+        ret += to_string(c.id) + '\t';
+        ret += string(c.nickname);
+        if (c.id == FD)
+        {
+            ret += "\t(uno mismo)";
+        }
+        ret += '\n';
+    }
+    ret += "-----Lista de clientes-----\n";
+    return ret;
+}
+
+void sendMsg2AllClients(const char *content)
+{
+    for (auto &c : clients)
+    {
+        send(c.id, content, strlen(content), 0);
+    }
+}
+
+void sendMsg2ClientsExcept(const char *content, int exceptFD)
+{
+    for (auto &c : clients)
+    {
+        if (c.id == exceptFD)
+            continue;
+        send(c.id, content, strlen(content), 0);
+    }
+}
 
 
 void *recvsocket(void *arg) 
@@ -310,8 +368,8 @@ void *recvsocket(void *arg)
             {
                 string msg2send;
                 msg2send = "***MENSAJE PRIVADO DEL CLIENTE{";
-                msg2send += string(client->nickname) + "}***\n" + string(msg);
-                msg2send += "\n***MENSAJE PRIVADO***\n";
+                msg2send += string(client->nickname) + "}*\n" + string(msg);
+                msg2send += "\n**MENSAJE PRIVADO**\n";
                 send(toid, msg2send.c_str(), msg2send.size(), 0);
             }
             else
@@ -325,6 +383,8 @@ void *recvsocket(void *arg)
         printf("%s", content);
         sendMsg2ClientsExcept(content, st);*/
     }
+
+    removeClient(st);
     close(st);
     pthread_cancel(pthread_self());
 }
@@ -338,7 +398,7 @@ void *sendsocket(void *arg)
         read(STDIN_FILENO, s, sizeof(s));
 
         string content = "SERVER: " + string(s);
-       // sendMsg2AllClients(content.c_str());
+        sendMsg2AllClients(content.c_str());
     }
 }
 
@@ -381,8 +441,8 @@ int main(int arg, char *args[])
         return EXIT_FAILURE;
     }
 
-   // pthread_t thread_send;
-    //pthread_create(&thread_send, NULL, sendsocket, NULL);
+    pthread_t thread_send;
+    pthread_create(&thread_send, NULL, sendsocket, NULL);
 
     int client_st = 0;
 
