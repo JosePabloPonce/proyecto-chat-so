@@ -41,64 +41,6 @@ struct sockaddr_in client_addr;
 
 vector<client_t> clients;
 
-bool removeClient(int id)
-{
-    for (auto it = clients.begin(); it != clients.end(); it++)
-    {
-        if ((*it).id == id)
-        {
-            clients.erase(it);
-            return true;
-        }
-    }
-
-    return false;
-}
-
-bool existClient(int id)
-{
-    for (auto &c : clients)
-    {
-        if (c.id == id)
-            return true;
-    }
-    return false;
-}
-
-string getAllClients(int FD)
-{
-    string ret = "-----Lista de clientes-----\nID\tUsuario\n";
-    for (auto &c : clients)
-    {
-        ret += to_string(c.id) + '\t';
-        ret += string(c.nickname);
-        if (c.id == FD)
-        {
-            ret += "\t(uno mismo)";
-        }
-        ret += '\n';
-    }
-    ret += "-----Lista de clientes-----\n";
-    return ret;
-}
-
-void sendMsg2AllClients(const char *content)
-{
-    for (auto &c : clients)
-    {
-        send(c.id, content, strlen(content), 0);
-    }
-}
-
-void sendMsg2ClientsExcept(const char *content, int exceptFD)
-{
-    for (auto &c : clients)
-    {
-        if (c.id == exceptFD)
-            continue;
-        send(c.id, content, strlen(content), 0);
-    }
-}
 
 
 void *recvsocket(void *arg) 
@@ -123,44 +65,78 @@ void *recvsocket(void *arg)
 
 
             if(reques == "INIT_CONEX"){
+                bool flag = true;
                 string connect_time = request["body"][0];
                 string user_id = request["body"][1];
                 //cout<<rc;
-                id[usuarios][0] = to_string(st);
-                id[usuarios][1] = user_id;
-            
-                clientes[usuarios][0] = user_id;
-                clientes[usuarios][1] = "0";
-                usuarios++;
-                cout<<usuarios<<" Usuario conectado "<<endl;
-                json response;
-                response["response"] = "INIT_CONEX";
-                response["code"] = 200;
+                for(int i=0; i<32; i++){
+                    //cout<<user_id<<id[i][1]<<endl;
+                    if(id[i][1].compare(user_id) == 0){
+                        //send(stoi(id[i][0]), s, senviar.size()+1, 0);
+                        flag = false;
+                        cout<<"El usuario ya existe";
+                        json response;
+                        response["response"] = "INIT_CONEX";
+                        response["code"] = 101; 
+                        string senviar = response.dump();
+                        strcpy(s, senviar.c_str());
+                        send(st, s, senviar.size()+1, 0);
+                                                
+                    }
+                }
+                if(flag){
+                    id[usuarios][0] = to_string(st);
+                    id[usuarios][1] = user_id;
+                
+                    clientes[usuarios][0] = user_id;
+                    clientes[usuarios][1] = "0";
 
-                string senviar = response.dump();
-                strcpy(s, senviar.c_str());
-                send(st, s, senviar.size()+1, 0);
+                    usuarios++;
+                    
+                    cout<<usuarios<<" Usuario conectado "<<endl;
+                    json response;
+                    response["response"] = "INIT_CONEX";
+                    response["code"] = 200;
+
+                    string senviar = response.dump();
+                    strcpy(s, senviar.c_str());
+                    send(st, s, senviar.size()+1, 0);
+                }
+                
                     
         } 
 
 
             else if(reques == "GET_CHAT"){
                 string all = request["body"];
-                //crear un usuario con el user ID
-                //clients.push_back(*client);
+                if(all == "all"){
+                    json response;
+                    response["response"] = "GET_CHAT";
+                    response["code"] = 200;
+                    response["body"] = chat_almacenados;
 
-                json response;
-                response["response"] = "GET_CHAT";
-                response["code"] = 200;
-                response["body"] = chat_almacenados;
+                    //fprintf(stderr, "%s", connect_time);
+                    //fprintf(stderr, "%s", user_id);
+                    string senviar = response.dump();
+                    strcpy(s, senviar.c_str());
+                    send(st, s, senviar.size()+1, 0);
+                }
+                else{
+                    json response;
+                    response["response"] = "GET_CHAT";
+                    response["code"] = 200;
+                    response["body"] = chat_almacenados;
 
-                //fprintf(stderr, "%s", connect_time);
-                //fprintf(stderr, "%s", user_id);
-                string senviar = response.dump();
-                strcpy(s, senviar.c_str());
-                send(st, s, senviar.size()+1, 0);
+                    //fprintf(stderr, "%s", connect_time);
+                    //fprintf(stderr, "%s", user_id);
+                    string senviar = response.dump();
+                    strcpy(s, senviar.c_str());
+                    send(st, s, senviar.size()+1, 0);
+                }
+
                     
-        }     
+        }
+             
  
 
             else if(reques == "POST_CHAT"){
@@ -168,33 +144,59 @@ void *recvsocket(void *arg)
                 from = request["body"][1];
                 delivered_at = request["body"][2];
                 string to = request["body"][3];
+                if(to == "all"){
+                    json response;
+                    response["response"] = "POST_CHAT";
+                    response["code"] = 200;
+                    cout<<"Mensaje: "<<message<<" from: "<<from<< " Fecha: "<<delivered_at<< " A: "<<to<<endl;
+                    chat_almacenados[contador_mensajes][0] = message;
+                    chat_almacenados[contador_mensajes][1] = from;
+                    chat_almacenados[contador_mensajes][2] = delivered_at;
+                    contador_mensajes++;
+                    //fprintf(stderr, "%s", connect_time);
+                    //fprintf(stderr, "%s", user_id);
+                    string senviar = response.dump();
+                    strcpy(s, senviar.c_str());
+                    send(st, s, senviar.size()+1, 0);
+                    response["response"] = "NEW_MESSAGE";
+                    response["body"] = {{message, from, delivered_at, "all" }};
+                    senviar = response.dump();
+                    strcpy(s, senviar.c_str());
 
-                //crear un usuario con el user ID
-                //clients.push_back(*client);
-
-                json response;
-                response["response"] = "POST_CHAT";
-                response["code"] = 200;
-                cout<<"Mensaje: "<<message<<" from: "<<from<< " Fecha: "<<delivered_at<< " A: "<<to<<endl;
-                chat_almacenados[contador_mensajes][0] = message;
-                chat_almacenados[contador_mensajes][1] = from;
-                chat_almacenados[contador_mensajes][2] = delivered_at;
-                contador_mensajes++;
-                //fprintf(stderr, "%s", connect_time);
-                //fprintf(stderr, "%s", user_id);
-                string senviar = response.dump();
-                strcpy(s, senviar.c_str());
-                send(st, s, senviar.size()+1, 0);
-                response["response"] = "NEW_MESSAGE";
-                response["body"] = {{message, from, delivered_at, "all" }};
-                senviar = response.dump();
-                strcpy(s, senviar.c_str());
-
-                for(int i=0; i<32; i++){
-                    if(id[i][0] != to_string(st) && id[i][0] != ""){
-                        send(stoi(id[i][0]), s, senviar.size()+1, 0);
+                    for(int i=0; i<32; i++){
+                        if(id[i][0] != to_string(st) && id[i][0] != ""){
+                            send(stoi(id[i][0]), s, senviar.size()+1, 0);
+                        }
                     }
-                }                               
+                }
+                else{
+                    json response;
+                    response["response"] = "POST_CHAT";
+                    response["code"] = 200;
+                    cout<<"MENSAJE PRIVADO\n";
+                    cout<<"Mensaje: "<<message<<" from: "<<from<< " Fecha: "<<delivered_at<< " A: "<<to<<endl;
+                    //chat_almacenados[contador_mensajes][0] = message;
+                    //chat_almacenados[contador_mensajes][1] = from;
+                    //chat_almacenados[contador_mensajes][2] = delivered_at;
+                    //contador_mensajes++;
+                    //fprintf(stderr, "%s", connect_time);
+                    //fprintf(stderr, "%s", user_id);
+                    string senviar = response.dump();
+                    strcpy(s, senviar.c_str());
+                    send(st, s, senviar.size()+1, 0);
+                    response["response"] = "NEW_MESSAGE";
+                    response["body"] = {{message, from, delivered_at, to }};
+                    senviar = response.dump();
+                    strcpy(s, senviar.c_str());
+                    for(int i=0; i<32; i++){
+                        cout<<to<<id[i][1]<<endl;
+                        if(id[i][1].compare(to) == 0){
+                            send(stoi(id[i][0]), s, senviar.size()+1, 0);
+                        }
+                    }
+                }
+
+                                           
         } 
         else if(reques == "GET_USER" && request["body"] == "all"){
                 cout<<"Usuarios Solicitados"<<endl;
@@ -256,6 +258,23 @@ void *recvsocket(void *arg)
                 strcpy(s, senviar.c_str());
                 send(st, s, senviar.size()+1, 0);
 
+        }
+        else if(reques == "END_CONEX"){
+            json response;
+            response["response"] = "END_CONEX";
+            response["code"] = 200;
+            string senviar = response.dump();
+            strcpy(s, senviar.c_str());
+            send(st, s, senviar.size()+1, 0);    
+            for(int i=0; i<32; i++)
+                {
+                if(to_string(st)==id[i][0]){
+                    if(id[i][1] == clientes[i][0]){
+                        clientes[i][0] = "";
+                        clientes[i][1] = "";
+                    }
+                }
+                }       
         }/* 
  
         string receivedStr = string(s);
@@ -306,8 +325,6 @@ void *recvsocket(void *arg)
         printf("%s", content);
         sendMsg2ClientsExcept(content, st);*/
     }
-
-    removeClient(st);
     close(st);
     pthread_cancel(pthread_self());
 }
@@ -321,7 +338,7 @@ void *sendsocket(void *arg)
         read(STDIN_FILENO, s, sizeof(s));
 
         string content = "SERVER: " + string(s);
-        sendMsg2AllClients(content.c_str());
+       // sendMsg2AllClients(content.c_str());
     }
 }
 
@@ -364,8 +381,8 @@ int main(int arg, char *args[])
         return EXIT_FAILURE;
     }
 
-    pthread_t thread_send;
-    pthread_create(&thread_send, NULL, sendsocket, NULL);
+   // pthread_t thread_send;
+    //pthread_create(&thread_send, NULL, sendsocket, NULL);
 
     int client_st = 0;
 
